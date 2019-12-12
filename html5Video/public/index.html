@@ -1,0 +1,248 @@
+<html>
+  <head>
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/7.4.0/firebase-app.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/7.4.0/firebase-auth.js"></script>
+    <script defer src="/__/firebase/7.4.0/firebase-database.js"></script>
+    <script defer src="/__/firebase/7.4.0/firebase-firestore.js"></script>
+    <script defer src="/__/firebase/7.4.0/firebase-messaging.js"></script>
+    <script defer src="/__/firebase/7.4.0/firebase-storage.js"></script>
+    <!-- initialize the SDK after all desired features are loaded -->
+    <script defer src="/__/firebase/init.js"></script>
+    <style>
+      ul {
+        list-style: none;
+      }
+      li {
+        display: inline;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <p>V 1.5.28</p>
+      <div>
+        <ul>
+          <li>Email:</li>
+          <li id="email">Not logged in</li>
+        </ul>
+      </div>
+      <div>
+        <ul>
+          <li>Video:</li>
+          <li><a id="videoLink">Record a video</a></li>
+        </ul>
+      </div>
+      <p>
+        <button id="login">
+          Login
+        </button>
+      </p>
+      <p>
+        <button id="start">
+          Record Video
+        </button>
+      </p>
+    </div>
+    <video id="video" autoplay muted="muted" playsinline></video>
+    <script>
+      // https://stackoverflow.com/questions/18509385/html-5-video-recording-and-storing-a-stream
+
+      var email,
+        videoLink,
+        video,
+        player,
+        supportedMimeType,
+        loginBtn,
+        startBtn,
+        stopBtn,
+        ul,
+        stream,
+        recorder,
+        chunks = [],
+        idle = true;
+      email = document.getElementById("email");
+      videoLink = document.getElementById("videoLink");
+      video = document.getElementById("video");
+      player = document.getElementById("player");
+
+      loginBtn = document.getElementById("login");
+      loginBtn.addEventListener("click", event => {
+        onLoginButton();
+      });
+
+      startBtn = document.getElementById("start");
+      startBtn.addEventListener("click", event => {
+        onStartButton();
+      });
+
+      function uuidv4() {
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(
+          c
+        ) {
+          var r = (Math.random() * 16) | 0,
+            v = c == "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      }
+
+      function onLoginButton() {
+        firebase
+          .auth()
+          .signInWithEmailAndPassword("gary@gmail.com", "password")
+          .then(function(firebaseUser) {
+            console.debug("logged in " + firebaseUser.user.email);
+            email.innerHTML = firebaseUser.user.email;
+          })
+          .catch(function(error) {
+            // Handle Errors here.
+            var errorCode = error.code;
+            var errorMessage = error.message;
+            email.innerHTML = "Not logged in";
+            // ...
+          });
+      }
+
+      function upload(file) {
+        var storageRef = firebase.storage().ref();
+        const fileName = uuidv4() + ".mp4";
+        var videoRef = storageRef.child(fileName);
+        var metadata = {
+          contentType: supportedMimeType
+        };
+        videoRef.put(file, metadata).then(function(snapshot) {
+          console.log("Uploaded a blob or file!");
+          snapshot.ref.getDownloadURL().then(function(downloadURL) {
+            console.log("File available at", downloadURL);
+            videoLink.innerHTML = downloadURL;
+            videoLink.setAttribute("href", downloadURL);
+          });
+        });
+
+        var user = firebase.auth().currentUser;
+        firebase
+          .firestore()
+          .collection("media")
+          .add({
+            fileName: fileName,
+            contentType: supportedMimeType,
+            email: user.email,
+            userId: user.uid
+          })
+          .then(function() {
+            console.log("Document successfully written!");
+          })
+          .catch(function(error) {
+            console.error("Error writing document: ", error);
+          });
+      }
+
+      function onStartButton() {
+        idle = !idle;
+        if (!idle) {
+          startBtn.innerHTML = "Stop";
+          requestVideo();
+        } else {
+          startBtn.innerHTML = "Record";
+          stopRecording();
+        }
+      }
+
+      // https://stackoverflow.com/questions/21015847/how-to-make-getusermedia-work-on-all-browsers
+      function getMedia() {
+        const options = { video: true, audio: true };
+
+        if (navigator.getUserMedia) {
+          return navigator.getUserMedia({
+            video: true,
+            audio: true
+          });
+        } else if (navigator.webkitGetUserMedia) {
+          return navigator.webkitGetUserMedia({
+            video: true,
+            audio: true
+          });
+        } else if (navigator.mozGetUserMedia) {
+          return navigator.mozGetUserMedia({
+            video: true,
+            audio: true
+          });
+        } else {
+          console.log("cant get media");
+          return null;
+        }
+      }
+
+      function requestVideo() {
+        getMedia()
+          .then(stm => {
+            stream = stm;
+            video.srcObject = stream;
+            startRecording();
+          })
+          .catch(e => {
+            console.error("getUserMedia() failed");
+            console.error(JSON.stringify(e));
+            console.error(e.name);
+          });
+      }
+
+      function getSupportedMimeType() {
+        if (supportedMimeType) {
+          return supportedMimeType;
+        }
+
+        const mimeTypes = [
+          "video/mp4",
+          "video/3gpp",
+          "video/webm;codecs=vp9",
+          "video/webm;codecs=vp8"
+        ];
+        for (let i = 0; i < mimeTypes.length; ++i) {
+          if (MediaRecorder.isTypeSupported(mimeTypes[i])) {
+            supportedMimeType = mimeTypes[i];
+            console.debug(supportedMimeType);
+            return supportedMimeType;
+          }
+        }
+      }
+
+      function startRecording() {
+        recorder = new MediaRecorder(stream, {
+          mimeType: getSupportedMimeType()
+        });
+
+        recorder.onstop = function(e) {
+          console.log("recorder stopped");
+          var blob = new Blob(chunks, { type: supportedMimeType });
+          upload(blob);
+        };
+
+        recorder.ondataavailable = e => {
+          chunks.push(e.data);
+        };
+
+        recorder.start();
+      }
+
+      function closeCamera() {
+        var itemsProcessed = 0;
+
+        stream.getTracks().forEach(function(track) {
+          track.stop();
+          itemsProcessed++;
+          if (itemsProcessed === stream.getTracks().length) {
+            // Chrome
+            recorder.stop();
+          }
+        });
+      }
+
+      function stopRecording() {
+        closeCamera();
+        console.debug("stopped");
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,182 @@
+<html>
+  <head>
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/7.5.0/firebase-app.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/7.5.0/firebase-auth.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-database.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-firestore.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-messaging.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-storage.js"></script>
+    <!-- initialize the SDK after all desired features are loaded -->
+    <script defer src="/__/firebase/init.js"></script>
+    <style>
+      ul {
+        list-style: none;
+      }
+      li {
+        display: inline;
+      }
+      /* https://tympanus.net/codrops/2015/09/15/styling-customizing-file-inputs-smart-way/ */
+      .inputfile {
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        position: absolute;
+        z-index: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <p>V1.0.10</p>
+    <div>
+      <ul>
+        <li>Email:</li>
+        <li id="email">Not logged in</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li>File name:</li>
+        <li><a id="fileName">Take a photo</a></li>
+      </ul>
+    </div>
+    <div>
+      <ul>
+        <li>Video:</li>
+        <li><a id="videoLink">Take a photo</a></li>
+      </ul>
+    </div>
+    <p>
+      <button id="login">
+        Login
+      </button>
+    </p>
+
+    <p id="message"></p>
+    <button id="recordVideo">Record Video</button>
+    <!-- https://stackoverflow.com/questions/793014/jquery-trigger-file-input -->
+    <label for="recorder">Click Me</label>
+    <input
+      class="inputfile"
+      type="file"
+      accept="image/*"
+      capture="camera"
+      id="recorder"
+      name="recorder"
+    />
+    <video id="player" controls></video>
+    <script>
+      var supportedMimeType = "image/jpeg";
+      var loginBtn = document.getElementById("login");
+      loginBtn.addEventListener("click", event => {
+        onLoginButton();
+      });
+
+      var recordVideoButton = document.getElementById("recordVideo");
+      recordVideoButton.addEventListener("click", event => {
+        console.log("recordVideoButton click");
+        triggerRecordVideo();
+      });
+
+      var recorder = document.getElementById("recorder");
+      var player = document.getElementById("player");
+
+      function displayMessage(text) {
+        var message = document.getElementById("message");
+        message.innerHTML = text;
+      }
+
+      function displayText(id, text) {
+        var message = document.getElementById(id);
+        message.innerHTML = text;
+      }
+
+      function onLoginButton() {
+        firebase
+          .auth()
+          .signInWithEmailAndPassword("gary@gmail.com", "password")
+          .then(function(firebaseUser) {
+            console.debug("logged in " + firebaseUser.user.email);
+            email.innerHTML = firebaseUser.user.email;
+          })
+          .catch(function(error) {
+            // Handle Errors here.
+            var errorCode = error.code;
+            var errorMessage = error.message;
+            email.innerHTML = "Not logged in";
+            // ...
+          });
+      }
+
+      // https://stackoverflow.com/questions/906486/how-can-i-programmatically-invoke-an-onclick-event-from-a-anchor-tag-while-kee
+      function triggerRecordVideo() {
+        displayMessage("triggerRecordVideo");
+        console.log("triggerRecordVideo");
+        var elem = document.getElementById("recorder");
+        if (typeof elem.onclick == "function") {
+          console.log("triggerRecordVideo got recorder ... clicking");
+          elem.onclick.apply(elem);
+        }
+      }
+
+      function uuidv4() {
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(
+          c
+        ) {
+          var r = (Math.random() * 16) | 0,
+            v = c == "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      }
+
+      function upload(file) {
+        var storageRef = firebase.storage().ref();
+        const fileName = uuidv4() + ".jpg";
+        displayText("fileName", fileName);
+        var videoRef = storageRef.child(fileName);
+        var metadata = {
+          contentType: supportedMimeType
+        };
+        videoRef.put(file, metadata).then(function(snapshot) {
+          displayMessage("Uploaded a blob or file!");
+          console.log("Uploaded a blob or file!");
+          snapshot.ref.getDownloadURL().then(function(downloadURL) {
+            console.log("File available at", downloadURL);
+            var videoLink = document.getElementById("videoLink");
+            videoLink.innerHTML = downloadURL;
+            videoLink.setAttribute("href", downloadURL);
+          });
+        });
+
+        var user = firebase.auth().currentUser;
+        firebase
+          .firestore()
+          .collection("media")
+          .add({
+            fileName: fileName,
+            contentType: supportedMimeType,
+            email: user.email,
+            userId: user.uid
+          })
+          .then(function() {
+            console.log("Document successfully written!");
+          })
+          .catch(function(error) {
+            console.error("Error writing document: ", error);
+          });
+      }
+
+      recorder.addEventListener("change", function(e) {
+        displayMessage("recorder change");
+        console.log("recorder change");
+        var file = e.target.files[0];
+        //var blob = new Blob(chunks, { type: supportedMimeType });
+        upload(file);
+        // Do something with the video file.
+        //player.src = URL.createObjectURL(file);
+      });
+    </script>
+  </body>
+</html>

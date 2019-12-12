@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Welcome to Firebase Hosting</title>
+
+    <!-- update the version number as needed -->
+    <script defer src="/__/firebase/7.5.0/firebase-app.js"></script>
+    <!-- include only the Firebase features as you need -->
+    <script defer src="/__/firebase/7.5.0/firebase-auth.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-database.js"></script>
+    <script defer src="/__/firebase/7.4.0/firebase-firestore.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-messaging.js"></script>
+    <script defer src="/__/firebase/7.5.0/firebase-storage.js"></script>
+    <!-- initialize the SDK after all desired features are loaded -->
+    <script defer src="/__/firebase/init.js"></script>
+
+    <style media="screen">
+      body {
+        background: #eceff1;
+        color: rgba(0, 0, 0, 0.87);
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
+      #message {
+        background: white;
+        max-width: 360px;
+        margin: 100px auto 16px;
+        padding: 32px 24px;
+        border-radius: 3px;
+      }
+      #message h2 {
+        color: #ffa100;
+        font-weight: bold;
+        font-size: 16px;
+        margin: 0 0 8px;
+      }
+      #message h1 {
+        font-size: 22px;
+        font-weight: 300;
+        color: rgba(0, 0, 0, 0.6);
+        margin: 0 0 16px;
+      }
+      #message p {
+        line-height: 140%;
+        margin: 16px 0 24px;
+        font-size: 14px;
+      }
+      #message a {
+        display: block;
+        text-align: center;
+        background: #039be5;
+        text-transform: uppercase;
+        text-decoration: none;
+        color: white;
+        padding: 16px;
+        border-radius: 4px;
+      }
+      #message,
+      #message a {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+      }
+      #load {
+        color: rgba(0, 0, 0, 0.4);
+        text-align: center;
+        font-size: 13px;
+      }
+      @media (max-width: 600px) {
+        body,
+        #message {
+          margin-top: 0;
+          background: white;
+          box-shadow: none;
+        }
+        body {
+          border-top: 16px solid #ffa100;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <p>
+      V1.1.4
+    </p>
+    <button id="loginButton">
+      Login
+    </button>
+    <button id="startCameraButton">
+      Start
+    </button>
+    <video id="video" width="640" height="480" autoplay></video>
+    <button id="photoButton">
+      Photo
+    </button>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <!--<input type="file" accept="image/*" capture="camera" />-->
+    <button id="uploadButton">
+      Upload
+    </button>
+    <script>
+      console.debug("start");
+      var loginButton = document.getElementById("loginButton");
+      loginButton.onclick = loginButtonOnClick;
+      var startCameraButton = document.getElementById("startCameraButton");
+      startCameraButton.onclick = startCameraOnClick;
+      var photoButton = document.getElementById("photoButton");
+      photoButton.onclick = photoButtonOnClick;
+      var uploadButton = document.getElementById("uploadButton");
+      uploadButton.onclick = uploadButtonOnClick;
+      var canvas = document.getElementById("canvas");
+      var context = canvas.getContext("2d");
+      var video = document.getElementById("video");
+
+      function uuidv4() {
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(
+          c
+        ) {
+          var r = (Math.random() * 16) | 0,
+            v = c == "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      }
+
+      function loginButtonOnClick() {
+        console.debug("loginButtonOnClick");
+        firebase
+          .auth()
+          .signInWithEmailAndPassword("gary@gmail.com", "password")
+          .then(function(firebaseUser) {
+            console.debug("logged in " + firebaseUser.user.email);
+          })
+          .catch(function(error) {
+            // Handle Errors here.
+            var errorCode = error.code;
+            var errorMessage = error.message;
+            // ...
+          });
+      }
+
+      function startCameraOnClick() {
+        console.debug("startCameraOnClick");
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          // Not adding `{ audio: true }` since we only want video now
+          navigator.mediaDevices
+            .getUserMedia({ video: true })
+            .then(function(mediaStream) {
+              stream = mediaStream;
+              video.srcObject = mediaStream;
+              video.play();
+            });
+        }
+      }
+
+      function closeCamera() {
+        stream.getTracks().forEach(function(track) {
+          track.stop();
+        });
+      }
+
+      function photoButtonOnClick() {
+        console.debug("photoButtonOnClick");
+        context.drawImage(video, 0, 0, 640, 480);
+        setTimeout(function() {
+          closeCamera();
+        }, 500);
+      }
+
+      function uploadButtonOnClick() {
+        console.debug("uploadButtonOnClick");
+        var storageRef = firebase.storage().ref();
+        const fileName = uuidv4() + ".png";
+        var videoRef = storageRef.child(fileName);
+        var metadata = {
+          contentType: "image/png"
+        };
+        canvas.toBlob(function(blob) {
+          videoRef.put(blob, metadata).then(function(snapshot) {
+            console.log("Uploaded a blob or file!");
+            snapshot.ref.getDownloadURL().then(function(downloadURL) {
+              console.log(downloadURL);
+            });
+          });
+        });
+        //var png = canvas.toDataURL("image/png");
+        //var blob = new Blob(canvas, { type: "image/png" });
+
+        var user = firebase.auth().currentUser;
+        firebase
+          .firestore()
+          .collection("media")
+          .add({
+            fileName: fileName,
+            contentType: "image/png",
+            email: user.email,
+            userId: user.uid
+          })
+          .then(function() {
+            console.log("Document successfully written!");
+          })
+          .catch(function(error) {
+            console.error("Error writing document: ", error);
+          });
+      }
+    </script>
+  </body>
+</html>
